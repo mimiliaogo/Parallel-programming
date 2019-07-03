@@ -1,5 +1,5 @@
-#Parallel progamming
-###7/2_L1
+# Parallel progamming
+### 7/2_L1
 ```
 sequential process ->一次一個instruction
 parallel->instruction 同時執行 變快 多個core執行
@@ -18,7 +18,7 @@ Pthread low level
 OpenMP higher level ->automatically produce pthread(lower performance)
 ```
 
-####Flynn’s classic taxonomy
+#### Flynn’s classic taxonomy
 ```
 11. 所有processor可以吃甚麼?
 13. Like sigle core
@@ -27,7 +27,7 @@ OpenMP higher level ->automatically produce pthread(lower performance)
 16. typical CPU most flexible
 hardware limitation 不能太多PU
 ```
-####Memory architecture classification
+#### Memory architecture classification
 ```
 18.
 Distributed memory 跨電腦
@@ -45,7 +45,7 @@ Datacenter: large scale ex. Google
 22.明確的知道 值被改了
 send and receive
 ```
-####Programming model classification
+#### Programming model classification
 ```
 抽象硬體
 25. 一個程式在跑由memory content 組成 不同process memory content is independent but thread programming (create thread) let the three content (code, data, files) 因為main thread 已經把code load 進來。
