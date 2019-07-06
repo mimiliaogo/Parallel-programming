@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <stdio.h>
 using namespace std;
-void Odd_Even_switch(float data_arr[], int local_size, int phase, int even_partner, int odd_parter, int rank, int size);
+void Odd_Even_switch(float data_arr[], int local_size, int phase, int even_partner, int odd_partner, int rank, int size, int even_size, int odd_size);
 // qsort cmp function
 int compare_float(const void *a, const void *b)
 {
@@ -42,7 +42,7 @@ void mergeArrays(float arr1[], float arr2[], int n1,
     while (j < n2)
         arr3[k++] = arr2[j++];
 }
-void ParallelSort(float data_arr[], int local_size, int rank, int size)
+void ParallelSort(float data_arr[], int local_size, int rank, int size, int max_add)
 {
     int even_partner;
     int odd_partner;
@@ -62,15 +62,31 @@ void ParallelSort(float data_arr[], int local_size, int rank, int size)
         odd_partner = rank - 1;
     }
     /* Find partner size */
-    
+    int even_size;
+    int odd_size;
+    if ((rank > max_add && even_partner > max_add) || (rank <= max_add && even_partner <= max_add)) {
+    even_size = local_size;
+    } else if (rank > max_add && even_partner <= max_add ) {
+        even_size = local_size + 1;
+    } else if (rank <= max_add && even_partner > max_add ) {
+        even_size = local_size - 1;
+    }
+    if ((rank > max_add && odd_partner > max_add) || (rank <= max_add && odd_partner <= max_add)) {
+        odd_size = local_size;
+    } else if (rank > max_add && odd_partner <= max_add ) {
+        odd_size = local_size + 1;
+    } else if (rank <= max_add && odd_partner > max_add ) {
+        odd_size = local_size - 1;
+    }
+
     int phase;
     for (int phase = 0; phase < size + 1; phase++)
     {
-        Odd_Even_switch(data_arr, local_size, phase, even_partner, odd_partner, rank, size);
+        Odd_Even_switch(data_arr, local_size, phase, even_partner, odd_partner, rank, size, even_size, odd_size);
     }
 }
 
-void Odd_Even_switch(float data_arr[], int local_size, int phase, int even_partner, int odd_partner, int rank, int size)
+void Odd_Even_switch(float data_arr[], int local_size, int phase, int even_partner, int odd_partner, int rank, int size, int even_size, int odd_size)
 {
     if (phase % 2 == 0)
     { // even phase
@@ -87,20 +103,20 @@ void Odd_Even_switch(float data_arr[], int local_size, int phase, int even_partn
                 // cout<<rank<<"receive"<<'\n';
                 // haven't add diff local_size
                 //odd rank receive data from even rank and do merge sort
-                float *rec_arr = (float *)malloc(sizeof(float) * local_size);
-                MPI_Recv(rec_arr, local_size, MPI_FLOAT, even_partner, 99, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-                float *merge_arr = (float *)malloc(sizeof(float) * local_size * 2);
-                mergeArrays(data_arr, rec_arr, local_size, local_size, merge_arr);
-                for (int i = 0; i < local_size; i++)
+                float *rec_arr = (float *)malloc(sizeof(float) * even_size);
+                MPI_Recv(rec_arr, even_size, MPI_FLOAT, even_partner, 99, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                float *merge_arr = (float *)malloc(sizeof(float) * (local_size+even_size));
+                mergeArrays(data_arr, rec_arr, local_size, even_size, merge_arr);
+                for (int i = 0; i < even_size; i++)
                 { // copy front smallest numbers
                     rec_arr[i] = merge_arr[i];
                 }
-                for (int i = local_size; i < 2 * local_size; i++)
+                for (int i = even_size; i < (even_size + local_size); i++)
                 { //copy later bigger numbers to itself
-                    data_arr[i - local_size] = merge_arr[i];
+                    data_arr[i - even_size] = merge_arr[i];
                 }
                 //send the small half number to even rank
-                MPI_Send(rec_arr, local_size, MPI_FLOAT, even_partner, 99, MPI_COMM_WORLD);
+                MPI_Send(rec_arr, even_size, MPI_FLOAT, even_partner, 99, MPI_COMM_WORLD);
             }
         }
     }
@@ -119,20 +135,20 @@ void Odd_Even_switch(float data_arr[], int local_size, int phase, int even_partn
                 // cout<<rank<<"receive"<<'\n';
                 // haven't add diff local_size
                 //odd rank receive data from even rank and do merge sort
-                float *rec_arr = (float *)malloc(sizeof(float) * local_size);
-                MPI_Recv(rec_arr, local_size, MPI_FLOAT, odd_partner, 99, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-                float *merge_arr = (float *)malloc(sizeof(float) * local_size * 2);
-                mergeArrays(data_arr, rec_arr, local_size, local_size, merge_arr);
-                for (int i = 0; i < local_size; i++)
+                float *rec_arr = (float *)malloc(sizeof(float) * odd_size);
+                MPI_Recv(rec_arr, odd_size, MPI_FLOAT, odd_partner, 99, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                float *merge_arr = (float *)malloc(sizeof(float) * (local_size + odd_size));
+                mergeArrays(data_arr, rec_arr, local_size, odd_size, merge_arr);
+                for (int i = 0; i < odd_size; i++)
                 { // copy front smallest numbers
                     rec_arr[i] = merge_arr[i];
                 }
-                for (int i = local_size; i < 2 * local_size; i++)
+                for (int i = odd_size; i < (odd_size + local_size); i++)
                 { //copy later bigger numbers to itself
-                    data_arr[i - local_size] = merge_arr[i];
+                    data_arr[i - odd_size] = merge_arr[i];
                 }
                 //send the small half number to even rank
-                MPI_Send(rec_arr, local_size, MPI_FLOAT, odd_partner, 99, MPI_COMM_WORLD);
+                MPI_Send(rec_arr, odd_size, MPI_FLOAT, odd_partner, 99, MPI_COMM_WORLD);
             }
         }
     }
@@ -189,21 +205,21 @@ int main(int argc, char **argv)
         qsort(data_arr, local_size, sizeof(float), compare_float);
 
        // print each process array
-        // cout<<rank<<": ";
-        // for (int i=0; i<local_size; i++) {
-        //     cout<<data_arr[i]<<' ';
-        // }
-        // cout<<'\n';
+        cout<<rank<<": ";
+        for (int i=0; i<local_size; i++) {
+            cout<<data_arr[i]<<' ';
+        }
+        cout<<'\n';
 
         //start  parallel sorting
-        ParallelSort(data_arr, local_size, rank, size);
+        ParallelSort(data_arr, local_size, rank, size, max_add);
         //print each process array
 
-        // cout<<rank<<": ";
-        // for (int i=0; i<local_size; i++) {
-        //     cout<<data_arr[i]<<' ';
-        // }
-        // cout<<'\n';
+        cout<<rank<<": ";
+        for (int i=0; i<local_size; i++) {
+            cout<<data_arr[i]<<' ';
+        }
+        cout<<'\n';
     }
     MPI_File output;
     MPI_File_open(MPI_COMM_WORLD, argv[3], MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL, &output);
