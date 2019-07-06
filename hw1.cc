@@ -61,7 +61,8 @@ void ParallelSort(float data_arr[], int local_size, int rank, int size)
             even_partner = MPI_PROC_NULL; // Idle during even phase
         odd_partner = rank - 1;
     }
-
+    /* Find partner size */
+    
     int phase;
     for (int phase = 0; phase < size + 1; phase++)
     {
@@ -194,30 +195,15 @@ int main(int argc, char **argv)
         // }
         // cout<<'\n';
 
-
-        //rank 0 to 1 //send receive testing
-        // if (rank==0) {
-        //     MPI_Send(data_arr ,3 ,MPI_FLOAT, 1, 0, MPI_COMM_WORLD);
-        // } else if (rank==1) {
-        //     float* rec_arr = (float*) malloc(sizeof(float)*3);
-        //     //receive data from 0
-        //     MPI_Recv(rec_arr, 3, MPI_FLOAT, 0, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-        //     cout<<"rank 1 rec from rank 0: ";
-        //     for (int i=0; i<3; i++) {
-        //         cout<<rec_arr[i]<<' ';
-        //     }
-
-        // }
-
         //start  parallel sorting
         ParallelSort(data_arr, local_size, rank, size);
         //print each process array
 
-        cout<<rank<<": ";
-        for (int i=0; i<local_size; i++) {
-            cout<<data_arr[i]<<' ';
-        }
-        cout<<'\n';
+        // cout<<rank<<": ";
+        // for (int i=0; i<local_size; i++) {
+        //     cout<<data_arr[i]<<' ';
+        // }
+        // cout<<'\n';
     }
     MPI_File output;
     MPI_File_open(MPI_COMM_WORLD, argv[3], MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL, &output);
