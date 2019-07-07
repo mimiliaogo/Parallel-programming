@@ -65,7 +65,7 @@ void ParallelSort(float data_arr[], int local_size, int rank, int size, int max_
     int even_size;
     int odd_size;
     if ((rank > max_add && even_partner > max_add) || (rank <= max_add && even_partner <= max_add)) {
-    even_size = local_size;
+        even_size = local_size;
     } else if (rank > max_add && even_partner <= max_add ) {
         even_size = local_size + 1;
     } else if (rank <= max_add && even_partner > max_add ) {
@@ -111,12 +111,13 @@ void Odd_Even_switch(float data_arr[], int local_size, int phase, int even_partn
                 { // copy front smallest numbers
                     rec_arr[i] = merge_arr[i];
                 }
+                //send the small half number to even rank
+                MPI_Send(rec_arr, even_size, MPI_FLOAT, even_partner, 99, MPI_COMM_WORLD);
                 for (int i = even_size; i < (even_size + local_size); i++)
                 { //copy later bigger numbers to itself
                     data_arr[i - even_size] = merge_arr[i];
                 }
-                //send the small half number to even rank
-                MPI_Send(rec_arr, even_size, MPI_FLOAT, even_partner, 99, MPI_COMM_WORLD);
+                
             }
         }
     }
@@ -143,12 +144,13 @@ void Odd_Even_switch(float data_arr[], int local_size, int phase, int even_partn
                 { // copy front smallest numbers
                     rec_arr[i] = merge_arr[i];
                 }
+                //send the small half number to even rank
+                MPI_Send(rec_arr, odd_size, MPI_FLOAT, odd_partner, 99, MPI_COMM_WORLD);
                 for (int i = odd_size; i < (odd_size + local_size); i++)
                 { //copy later bigger numbers to itself
                     data_arr[i - odd_size] = merge_arr[i];
                 }
-                //send the small half number to even rank
-                MPI_Send(rec_arr, odd_size, MPI_FLOAT, odd_partner, 99, MPI_COMM_WORLD);
+                
             }
         }
     }
@@ -205,21 +207,21 @@ int main(int argc, char **argv)
         qsort(data_arr, local_size, sizeof(float), compare_float);
 
        // print each process array
-        cout<<rank<<": ";
-        for (int i=0; i<local_size; i++) {
-            cout<<data_arr[i]<<' ';
-        }
-        cout<<'\n';
+        // cout<<rank<<": ";
+        // for (int i=0; i<local_size; i++) {
+        //     cout<<data_arr[i]<<' ';
+        // }
+        // cout<<'\n';
 
         //start  parallel sorting
         ParallelSort(data_arr, local_size, rank, size, max_add);
         //print each process array
 
-        cout<<rank<<": ";
-        for (int i=0; i<local_size; i++) {
-            cout<<data_arr[i]<<' ';
-        }
-        cout<<'\n';
+        // cout<<rank<<": ";
+        // for (int i=0; i<local_size; i++) {
+        //     cout<<data_arr[i]<<' ';
+        // }
+        // cout<<'\n';
     }
     MPI_File output;
     MPI_File_open(MPI_COMM_WORLD, argv[3], MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL, &output);
