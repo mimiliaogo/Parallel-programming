@@ -4,6 +4,7 @@
 #include <vector>
 #include <algorithm>
 #include <stdio.h>
+#include <cstring>
 using namespace std;
 void Odd_Even_switch(float data_arr[], int local_size, int phase, int even_partner, int odd_partner, int rank, int size, int even_size, int odd_size);
 // qsort cmp function
@@ -107,17 +108,18 @@ void Odd_Even_switch(float data_arr[], int local_size, int phase, int even_partn
                 MPI_Recv(rec_arr, even_size, MPI_FLOAT, even_partner, 99, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
                 float *merge_arr = (float *)malloc(sizeof(float) * (local_size+even_size));
                 mergeArrays(data_arr, rec_arr, local_size, even_size, merge_arr);
-                for (int i = 0; i < even_size; i++)
-                { // copy front smallest numbers
-                    rec_arr[i] = merge_arr[i];
-                }
+                // for (int i = 0; i < even_size; i++)
+                // { // copy front smallest numbers
+                //     rec_arr[i] = merge_arr[i];
+                // }
+                memcpy(rec_arr, merge_arr, sizeof(float)*even_size);
                 //send the small half number to even rank
                 MPI_Send(rec_arr, even_size, MPI_FLOAT, even_partner, 99, MPI_COMM_WORLD);
                 for (int i = even_size; i < (even_size + local_size); i++)
                 { //copy later bigger numbers to itself
                     data_arr[i - even_size] = merge_arr[i];
                 }
-                
+
             }
         }
     }
@@ -140,17 +142,18 @@ void Odd_Even_switch(float data_arr[], int local_size, int phase, int even_partn
                 MPI_Recv(rec_arr, odd_size, MPI_FLOAT, odd_partner, 99, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
                 float *merge_arr = (float *)malloc(sizeof(float) * (local_size + odd_size));
                 mergeArrays(data_arr, rec_arr, local_size, odd_size, merge_arr);
-                for (int i = 0; i < odd_size; i++)
-                { // copy front smallest numbers
-                    rec_arr[i] = merge_arr[i];
-                }
+                // for (int i = 0; i < odd_size; i++)
+                // { // copy front smallest numbers
+                //     rec_arr[i] = merge_arr[i];
+                // }
+                memcpy(rec_arr, merge_arr, sizeof(float)*odd_size);
                 //send the small half number to even rank
                 MPI_Send(rec_arr, odd_size, MPI_FLOAT, odd_partner, 99, MPI_COMM_WORLD);
                 for (int i = odd_size; i < (odd_size + local_size); i++)
                 { //copy later bigger numbers to itself
                     data_arr[i - odd_size] = merge_arr[i];
                 }
-                
+
             }
         }
     }
