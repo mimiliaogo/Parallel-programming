@@ -21,6 +21,8 @@ void mergeArrays(float arr1[], float arr2[], int n1,
             arr3[k++] = arr1[i++];
         else
             arr3[k++] = arr2[j++];
+        
+    
     }
 
     // Store remaining elements of first array
@@ -124,10 +126,14 @@ int main(int argc, char **argv)
 
         //space PRE malloc
         float *rec_arr_even = (float *)malloc(sizeof(float) * even_size);
-        float *merge_arr_even = (float *)malloc(sizeof(float) * (local_size+even_size));
+        float *merge_arr_even;
+        if (rank%2!=0) merge_arr_even = (float *)malloc(sizeof(float) * (local_size+even_size));
         float *rec_arr_odd = (float *)malloc(sizeof(float) * odd_size);
-        float *merge_arr_odd = (float *)malloc(sizeof(float) * (local_size+odd_size));
+        float *merge_arr_odd;
+        if (rank%2==0) merge_arr_odd = (float *)malloc(sizeof(float) * (local_size+odd_size));
+        
         int phase;
+        MPI_Request req1;
         for (int phase = 0; phase < size + 1; phase++)
         {
             //Odd_Even_switch(data_arr, local_size, phase, even_partner, odd_partner, rank, size, even_size, odd_size);
@@ -139,7 +145,8 @@ int main(int argc, char **argv)
                     { // even rank send to odd rank
                         // cout<<rank<<"send"<<'\n';
                         MPI_Send(data_arr, local_size, MPI_FLOAT, even_partner, 99, MPI_COMM_WORLD);
-                        MPI_Recv(data_arr, local_size, MPI_FLOAT, even_partner, 99, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                        //MPI_Recv(data_arr, local_size, MPI_FLOAT, even_partner, 99, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                        MPI_Irecv(data_arr, local_size, MPI_FLOAT, even_partner, 99, MPI_COMM_WORLD,&req1);
                     }
                     else
                     {
@@ -148,13 +155,14 @@ int main(int argc, char **argv)
                         MPI_Recv(rec_arr_even, even_size, MPI_FLOAT, even_partner, 99, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
                         // float *merge_arr = (float *)malloc(sizeof(float) * (local_size+even_size));
                         mergeArrays(data_arr, rec_arr_even, local_size, even_size, merge_arr_even);
-                        MPI_Send(merge_arr_even, even_size, MPI_FLOAT, even_partner, 99, MPI_COMM_WORLD);
+                        //MPI_Send(merge_arr_even, even_size, MPI_FLOAT, even_partner, 99, MPI_COMM_WORLD);
+                        MPI_Isend(merge_arr_even, even_size, MPI_FLOAT, even_partner, 99, MPI_COMM_WORLD, &req1);
                         for (int i = even_size; i < (even_size + local_size); i++)
                         { //copy later bigger numbers to itself
                             data_arr[i - even_size] = merge_arr_even[i];
                         }
-                        
                     }
+                    MPI_Wait(&req1, MPI_STATUS_IGNORE);
                 }
             }
             else
@@ -165,7 +173,8 @@ int main(int argc, char **argv)
                     { // odd rank send to even rank
                         // cout<<rank<<"send"<<'\n';
                         MPI_Send(data_arr, local_size, MPI_FLOAT, odd_partner, 99, MPI_COMM_WORLD);
-                        MPI_Recv(data_arr, local_size, MPI_FLOAT, odd_partner, 99, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                        //MPI_Recv(data_arr, local_size, MPI_FLOAT, odd_partner, 99, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                        MPI_Irecv(data_arr, local_size, MPI_FLOAT, odd_partner, 99, MPI_COMM_WORLD,&req1);
                     }
                     else
                     {
@@ -175,13 +184,14 @@ int main(int argc, char **argv)
                         //float *merge_arr = (float *)malloc(sizeof(float) * (local_size + odd_size));
                         mergeArrays(data_arr, rec_arr_odd, local_size, odd_size, merge_arr_odd);
                         //send the small half number to even rank
-                        MPI_Send(merge_arr_odd, odd_size, MPI_FLOAT, odd_partner, 99, MPI_COMM_WORLD);
+                        //MPI_Send(merge_arr_odd, odd_size, MPI_FLOAT, odd_partner, 99, MPI_COMM_WORLD);
+                        MPI_Isend(merge_arr_odd, odd_size, MPI_FLOAT, odd_partner, 99, MPI_COMM_WORLD, &req1);
                         for (int i = odd_size; i < (odd_size + local_size); i++)
                         { //copy later bigger numbers to itself
                             data_arr[i - odd_size] = merge_arr_odd[i];
                         }
-                        
                     }
+                    MPI_Wait(&req1, MPI_STATUS_IGNORE);
                 }
             }
         }
