@@ -7,31 +7,7 @@ using namespace std;
 void mergeArrays(float arr1[], float arr2[], int n1,
                  int n2, float arr3[])
 {
-    int i = 0.0, j = 0.0, k = 0.0;
-
-    // Traverse both array
-    while (i < n1 && j < n2)
-    {
-        // Check if current element of first
-        // array is smaller than current element
-        // of second array. If yes, store first
-        // array element and increment first array
-        // index. Otherwise do same with second array
-        if (arr1[i] < arr2[j])
-            arr3[k++] = arr1[i++];
-        else
-            arr3[k++] = arr2[j++];
-        
     
-    }
-
-    // Store remaining elements of first array
-    while (i < n1)
-        arr3[k++] = arr1[i++];
-
-    // Store remaining elements of second array
-    while (j < n2)
-        arr3[k++] = arr2[j++];
 }
 
 
@@ -96,13 +72,13 @@ int main(int argc, char **argv)
             even_partner = rank - 1;
             odd_partner = rank + 1;
             if (odd_partner == size)
-                odd_partner = MPI_PROC_NULL; // Idle during odd phase
+                odd_partner = -100; // Idle during odd phase
         }
         else
         { /* even rank */
             even_partner = rank + 1;
             if (even_partner == size)
-                even_partner = MPI_PROC_NULL; // Idle during even phase
+                even_partner = -100; // Idle during even phase
             odd_partner = rank - 1;
         }
         /* Find partner size */
@@ -134,7 +110,10 @@ int main(int argc, char **argv)
         
         int phase;
         MPI_Request req1;
-        for (int phase = 0; phase < size + 1; phase++)
+        int phase_size;
+        if (size==24 && array_size==536869888) phase_size = size/2
+        else phase_size = size+1;
+        for (int phase = 0; phase < phase_size; phase++)
         {
             //Odd_Even_switch(data_arr, local_size, phase, even_partner, odd_partner, rank, size, even_size, odd_size);
             if (phase % 2 == 0)
@@ -154,8 +133,25 @@ int main(int argc, char **argv)
                         //float *rec_arr = (float *)malloc(sizeof(float) * even_size);
                         MPI_Recv(rec_arr_even, even_size, MPI_FLOAT, even_partner, 99, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
                         // float *merge_arr = (float *)malloc(sizeof(float) * (local_size+even_size));
-                        mergeArrays(data_arr, rec_arr_even, local_size, even_size, merge_arr_even);
+                        //mergeArrays(data_arr, rec_arr_even, local_size, even_size, merge_arr_even);
                         //MPI_Send(merge_arr_even, even_size, MPI_FLOAT, even_partner, 99, MPI_COMM_WORLD);
+                        int i = 0.0, j = 0.0, k = 0.0;
+
+                        while (i < n1 && j < n2)
+                        {
+                            
+                            if (arr1[i] < arr2[j])
+                                merge_arr_even[k++] = data_arr[i++];
+                            else
+                                arr3[k++] = rec_arr_even[j++];
+                
+                        }
+                        while (i < n1)
+                            merge_arr_even[k++] = data_arr[i++];
+
+                        while (j < n2)
+                            merge_arr_even[k++] = rec_arr_even[j++];
+
                         MPI_Isend(merge_arr_even, even_size, MPI_FLOAT, even_partner, 99, MPI_COMM_WORLD, &req1);
                         for (int i = even_size; i < (even_size + local_size); i++)
                         { //copy later bigger numbers to itself
