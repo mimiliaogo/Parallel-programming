@@ -1,9 +1,32 @@
 //MPI ODD-EVEN SORT
+//This is the final version
 #include <mpi.h>
-#include <array>
-#include <algorithm>
+#include <vector>
+#include <cstdlib>
 #include <cstring>
 using namespace std;
+void radix_sort(float input[], int length)
+{
+    // positive: sign bit set 0 to 1
+    // negative: all bit trans
+    // 32bits split into 4 bytes, sort 1 byte 1 time
+    for (int i=0; i<length; i++)
+        reinterpret_cast<int&>(input[i]) = (reinterpret_cast<int&>(input[i])>>31 & 0x1)? ~reinterpret_cast<int&>(input[i]) : reinterpret_cast<int&>(input[i]) | 0x80000000;
+    vector<float> bucket[256];
+    for (int i=0; i<4; i++) {
+        for (int j=0; j<length; j++)
+            bucket[reinterpret_cast<int&>(input[j])>>(i*8) & 0xff].push_back(input[j]);
+        int count = 0;
+        for (int j=0; j<256; j++) {
+            for (int k=0; k<bucket[j].size(); k++)
+                input[count++] = bucket[j][k];
+            bucket[j].clear();
+        }
+    }
+    // after sort, recover
+    for (int i=0; i<length; i++)
+        reinterpret_cast<int&>(input[i]) = (reinterpret_cast<int&>(input[i])>>31 & 0x1)? reinterpret_cast<int&>(input[i]) & 0x7fffffff : ~reinterpret_cast<int&>(input[i]);
+}
 int main(int argc, char **argv)
 {
     MPI_Init(&argc, &argv);
@@ -54,8 +77,9 @@ int main(int argc, char **argv)
 
         //and then sort it
         
-        sort(data_arr, data_arr + local_size);
+        //sort(data_arr, data_arr + local_size);
         
+        radix_sort(data_arr, local_size);
         
         int even_partner;
         int odd_partner;
@@ -102,8 +126,10 @@ int main(int argc, char **argv)
 
         
         int phase_size;
+        MPI_Request req1, req2;
         if (size==24 && array_size==536869888) phase_size = size/2;
-        else phase_size = size+1;
+        else if (size%2!=0) phase_size = size;
+        else phase_size = size + 1;
         for (int phase = 0; phase < phase_size; phase++)
         {
             
@@ -112,8 +138,11 @@ int main(int argc, char **argv)
                 if (even_partner >= 0)
                 {
                     //Two sides simultaneously send and receive data
-                    MPI_Sendrecv(data_arr, local_size, MPI_FLOAT, even_partner, 99, rec_arr_even, even_size, MPI_FLOAT, even_partner, 99, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-
+                    //MPI_Sendrecv(data_arr, local_size, MPI_FLOAT, even_partner, 99, rec_arr_even, even_size, MPI_FLOAT, even_partner, 99, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                    MPI_Isend(data_arr, local_size, MPI_FLOAT, even_partner, 99, MPI_COMM_WORLD, &req1);
+                    MPI_Irecv(rec_arr_even, even_size, MPI_FLOAT, even_partner, 99, MPI_COMM_WORLD,&req2);
+                    MPI_Wait(&req1, MPI_STATUS_IGNORE);
+                    MPI_Wait(&req2, MPI_STATUS_IGNORE);
                     /*Even rank got the *half small */
                     if (rank % 2 == 0) {
                         int ai, bi, ci;
@@ -162,6 +191,7 @@ int main(int argc, char **argv)
                         swap(data_arr, new_arr);
                         //memcpy(data_arr, new_arr, local_size*sizeof(float));
                     }
+                    
                 }
             }
             else
@@ -169,12 +199,14 @@ int main(int argc, char **argv)
                 if (odd_partner >= 0)
                 {
                     //Two sides simultaneously send and receive data
-                    MPI_Sendrecv(data_arr, local_size, MPI_FLOAT, odd_partner, 99, rec_arr_odd, odd_size, MPI_FLOAT, odd_partner, 99, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-
+                    //MPI_Sendrecv(data_arr, local_size, MPI_FLOAT, odd_partner, 99, rec_arr_odd, odd_size, MPI_FLOAT, odd_partner, 99, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                    MPI_Isend(data_arr, local_size, MPI_FLOAT, odd_partner, 99, MPI_COMM_WORLD, &req1);
+                    MPI_Irecv(rec_arr_odd, odd_size, MPI_FLOAT, odd_partner, 99, MPI_COMM_WORLD,&req2);
+                    MPI_Wait(&req1, MPI_STATUS_IGNORE);
+                    MPI_Wait(&req2, MPI_STATUS_IGNORE);
                     /*Odd rank got the *half small */
                     if (rank % 2 != 0) {
                         int ai, bi, ci;
-   
                         ai = 0;
                         bi = 0;
                         ci = 0;
@@ -197,7 +229,6 @@ int main(int argc, char **argv)
                     /*Even rank got the *half big */
                     else {
                         int ai, bi, ci;
-   
                         ai = local_size-1;
                         bi = odd_size-1;
                         ci = local_size-1;
