@@ -29,13 +29,15 @@ int main(int argc, char**argv)
         id[i] = i;
     }
     double sum=0.0;
+    //create thread of NUMTHREAD 
+    //giving each thread an ID
     for (int k = 0; k < NUMTHREAD; k++)
     {
         pthread_create(&thread_ids[k], 0, Calpi, &id[k]);
     }
     for (int k=0;k < NUMTHREAD; k++) {
         double* result;
-        pthread_join(thread_ids[k], (void**)&result);
+        pthread_join(thread_ids[k], (void**)&result);//each thread saves the return values in result
         sum+=*result;
     }
     sum = 4*sum;
