@@ -72,7 +72,7 @@ int main(int argc, char** argv) {
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
     /* allocate memory for image */
-    int *image;
+    int *image=nullptr;
     if (rank==0) {
         image = (int*)malloc(width * height * sizeof(int));
         assert(image);
@@ -102,7 +102,7 @@ int main(int argc, char** argv) {
     int i, j; 
     int* repeats_arr = (int*) malloc(sizeof(int)*local_size);
 
-    #pragma omp parallel for schedule(dynamic, 20)
+    #pragma omp parallel for schedule(dynamic, 4)
     for (int k=0; k<local_size; k++) {
         data_1D = offset + k;
         i = data_1D % width;
@@ -122,8 +122,39 @@ int main(int argc, char** argv) {
         }
         repeats_arr[k] = repeats;
     }
-
-    MPI_Gather(repeats_arr, local_size, MPI_INT, image, local_size, MPI_INT, 0, MPI_COMM_WORLD);
+    /*Using the gatherv for fast testcases */
+    /*get the local_size of each rank */
+    if (size==3) {
+        int *local_size_arr = (int*) malloc (sizeof(int)*size);
+        int *offset_arr = (int*) malloc (sizeof(int)*size);
+        int local_Size, offSet;
+        for (int i=0; i<size; i++) {
+            if (i < data_all % size)
+            {
+                local_Size = data_all / size + 1;
+            }
+            else
+            {
+                local_Size = data_all / size;
+            }
+            if (i <= max_add)
+            offSet =  i * local_Size;
+            else
+            {
+                offSet = (max_add + 1) * (local_Size + 1);
+                offSet +=  (i - max_add - 1) * local_Size;
+            }
+            local_size_arr[i] = local_Size;
+            offset_arr[i] = offSet;
+        }
+        
+        MPI_Gatherv(repeats_arr, local_size, MPI_INT, image, local_size_arr,offset_arr, MPI_INT, 0, MPI_COMM_WORLD);
+        free(local_size_arr);
+        free(offset_arr);   
+    }
+    else {
+        MPI_Gather(repeats_arr, local_size, MPI_INT, image, local_size, MPI_INT, 0, MPI_COMM_WORLD);
+    }
     free(repeats_arr);
     /* draw and cleanup */
     if (rank==0) {
