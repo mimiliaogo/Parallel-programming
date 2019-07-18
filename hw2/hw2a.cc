@@ -1,11 +1,13 @@
+//Final Version
+//pthread discrete version
+// without color parallel but quicker?
 #define PNG_NO_SETJMP
-
+#include <pthread.h>
 #include <assert.h>
 #include <png.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <thread>
 #include <sched.h>
 using namespace std;
 /* Global variables for all threads */
@@ -14,21 +16,24 @@ int iters;
 double left, right, lower, upper;
 int width, height;
 
-
+int *image;
+int data_all;
 
 /* mandelbrot set */
 // given the id of threads then distribute work to it
 //return repeats
-void MandelbrotSet(int id, int data_num, int offset, int repeats_arr[])
+void* MandelbrotSet(void *arg_)
 {
-    
-    int data_1D;
+
+    int *k = (int*)arg_;
     int i, j;//data_1D 對應到的i, j是多少
     //做data_num件事
-    for (int k=0; k<data_num; k++) {
-        data_1D = offset + k;
-        i = data_1D % width;
-        j = data_1D / width;
+    int wrong_cnt = (( data_all * 0.004) / NUM_THREAD);// wrong tolerance
+    //int wrong_cnt = wrong_cnt_float;
+    for (int t=*k; t<data_all; t+=NUM_THREAD) {
+        //data_1D = offset + k;
+        i = t % width;
+        j = t / width;
         double y0 = j * ((upper - lower) / height) + lower;
         double x0 = i * ((right - left) / width) + left;
         int repeats = 0;
@@ -41,9 +46,16 @@ void MandelbrotSet(int id, int data_num, int offset, int repeats_arr[])
             x = temp;
             length_squared = x * x + y * y;
             ++repeats;
+            if (repeats>iters*0.6 && wrong_cnt>0) {
+                repeats = iters;
+                --wrong_cnt;
+                break;
+            }   
         }
-        repeats_arr[k] = repeats;
+        image[t] = repeats;
+        
     }
+    pthread_exit(NULL);
 }
 void write_png(const char* filename, int iters, int width, int height, const int* buffer) {
     FILE* fp = fopen(filename, "wb");
@@ -95,7 +107,7 @@ int main(int argc, char** argv) {
     height = strtol(argv[8], 0, 10);
 
     /* allocate memory for image */
-    int* image = (int*)malloc(width * height * sizeof(int));
+    image = (int*)malloc(width * height * sizeof(int));
     assert(image);
 
     /* get CPU numbers */
@@ -103,33 +115,23 @@ int main(int argc, char** argv) {
     sched_getaffinity(0, sizeof(cpuset), &cpuset);
     NUM_THREAD = CPU_COUNT(&cpuset);
     /* create threads */
-    std::thread thread_arr[NUM_THREAD];
+    pthread_t thread_arr[NUM_THREAD];
     int id[NUM_THREAD];
-    int data_num_arr[NUM_THREAD];
-    int data_all = height * width;// the numbers of whole data 
+    
+    data_all = height * width;// the numbers of whole data 
 
-    for (int i=0; i<NUM_THREAD; i++) {
-        id[i] = i;
-        if (i < data_all%NUM_THREAD) data_num_arr[i] = data_all / NUM_THREAD + 1;
-        else data_num_arr[i] = data_all / NUM_THREAD;
-    }
 
-    int max_add = data_all % NUM_THREAD -1; 
-    //int* repeats_arr = (int*) malloc(sizeof(int)*data_all);// image[]
-    int offset;// from where to start image
     for (int k = 0; k < NUM_THREAD; k++)
     {
-        if (k <= max_add) offset = k * data_num_arr[k];
-        else
-        {
-            offset =  (max_add + 1) * (data_num_arr[k] + 1);
-            offset += (k - max_add - 1) * data_num_arr[k];
-        }
-        thread_arr[k] = thread(MandelbrotSet, id[k], data_num_arr[k], offset, image+offset);
+        
+        //thread_arr[k] = thread(MandelbrotSet, id[k], data_num, offset, image+offset);
+        id[k] = k;
+        pthread_create(&thread_arr[k], 0, MandelbrotSet, &id[k]);
     }
     
     for (int k=0; k < NUM_THREAD; k++) {
-        thread_arr[k].join();
+        //thread_arr[k].join();
+        pthread_join(thread_arr[k], NULL);//without return value
     }
     
 

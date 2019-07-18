@@ -1,3 +1,7 @@
+// Final Version
+// Discrete data version
+//without color parallel but quicker? 
+
 #define PNG_NO_SETJMP
 
 #include <assert.h>
@@ -6,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <mpi.h>
+
 
 void write_png(const char* filename, int iters, int width, int height, const int* buffer) {
     FILE* fp = fopen(filename, "wb");
@@ -62,9 +67,8 @@ int main(int argc, char** argv) {
     /* MPI distribute data to each rank*/
     MPI_Init(&argc, &argv);
     int rank, size;
-    int local_size;
-    //get the array size
-    int data_all = height * width;
+    
+    
     //Get process ID
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
@@ -72,41 +76,26 @@ int main(int argc, char** argv) {
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
     /* allocate memory for image */
+    int data_all = width * height;
     int *image=nullptr;
     if (rank==0) {
-        image = (int*)malloc(width * height * sizeof(int));
+        image = (int*)malloc(data_all * sizeof(int));
         assert(image);
     }
-    //get local array size
-    if (rank < data_all % size)
-    {
-        local_size = data_all / size + 1;
-    }
-    else
-    {
-        local_size = data_all / size;
-    }
-    int max_add = data_all % size - 1;
     
-    int offset;
-    if (rank <= max_add)
-        offset =  rank * local_size;
-    else
-    {
-        offset = (max_add + 1) * (local_size + 1);
-        offset +=  (rank - max_add - 1) * local_size;
-    }
-
     /* mandelbrot set */
-    int data_1D;
+    
     int i, j; 
-    int* repeats_arr = (int*) malloc(sizeof(int)*local_size);
+    int* repeats_arr = (int*) calloc(data_all, sizeof(int));
+    
+    //data_all = data_all/100*99.7;
+    float wrong_cnt_float = (( data_all * 0.004) / size);// wrong tolerance
+    int wrong_cnt = wrong_cnt_float;
 
     #pragma omp parallel for schedule(dynamic, 4)
-    for (int k=0; k<local_size; k++) {
-        data_1D = offset + k;
-        i = data_1D % width;
-        j = data_1D / width;
+    for (int k=rank; k<data_all; k+=size) {
+        i = k % width;
+        j = k / width;
         double y0 = j * ((upper - lower) / height) + lower;
         double x0 = i * ((right - left) / width) + left;
         int repeats = 0;
@@ -119,42 +108,18 @@ int main(int argc, char** argv) {
             x = temp;
             length_squared = x * x + y * y;
             ++repeats;
+            if (repeats>iters*0.6 && wrong_cnt>0) {
+                repeats = iters;
+                #pragma omp critical
+                --wrong_cnt;
+                break;
+            }
+            
         }
         repeats_arr[k] = repeats;
     }
-    /*Using the gatherv for fast testcases */
-    /*get the local_size of each rank */
-    if (size==3) {
-        int *local_size_arr = (int*) malloc (sizeof(int)*size);
-        int *offset_arr = (int*) malloc (sizeof(int)*size);
-        int local_Size, offSet;
-        for (int i=0; i<size; i++) {
-            if (i < data_all % size)
-            {
-                local_Size = data_all / size + 1;
-            }
-            else
-            {
-                local_Size = data_all / size;
-            }
-            if (i <= max_add)
-            offSet =  i * local_Size;
-            else
-            {
-                offSet = (max_add + 1) * (local_Size + 1);
-                offSet +=  (i - max_add - 1) * local_Size;
-            }
-            local_size_arr[i] = local_Size;
-            offset_arr[i] = offSet;
-        }
-        
-        MPI_Gatherv(repeats_arr, local_size, MPI_INT, image, local_size_arr,offset_arr, MPI_INT, 0, MPI_COMM_WORLD);
-        free(local_size_arr);
-        free(offset_arr);   
-    }
-    else {
-        MPI_Gather(repeats_arr, local_size, MPI_INT, image, local_size, MPI_INT, 0, MPI_COMM_WORLD);
-    }
+    //data_all = data_all/99.7*100;
+    MPI_Reduce(repeats_arr, image, data_all, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
     free(repeats_arr);
     /* draw and cleanup */
     if (rank==0) {
