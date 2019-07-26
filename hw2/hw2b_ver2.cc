@@ -92,7 +92,7 @@ int main(int argc, char** argv) {
     float wrong_cnt_float = (( data_all * 0.004) / size);// wrong tolerance
     int wrong_cnt = wrong_cnt_float;
 
-    #pragma omp parallel for schedule(dynamic, 4)
+    #pragma omp parallel for schedule(dynamic, 1)
     for (int k=rank; k<data_all; k+=size) {
         i = k % width;
         j = k / width;
