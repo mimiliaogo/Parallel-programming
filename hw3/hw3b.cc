@@ -1,7 +1,6 @@
-/* hw3b initial version  */
 #include <stdio.h>
 #include <stdlib.h>
-#define B 32 //int B = 16;
+#define B 64 //int B = 16;
 const int INF = ((1 << 30) - 1);
 const int V = 50010;
 void input(char* inFileName);
@@ -82,12 +81,12 @@ void block_FW() {
     cudaMemcpy2D(Dist_gpu, pitch, Dist, bn*sizeof(int), bn*sizeof(int), bn, cudaMemcpyHostToDevice);
     pitch = pitch / sizeof(int);
     
-    dim3 block(B, B);
+    dim3 block(32, 32);
     dim3 grid2(round-1, 2);
     dim3 grid3(round, round); //to avoid border problem
     for (int r = 0; r < round; ++r) {
-        printf("%d %d\n", r, round);
-        fflush(stdout);
+        //printf("%d %d\n", r, round);
+        //fflush(stdout);
         /* Phase 1*/
         
         cal_kernel_phase1<<<1, block, B*B*sizeof(int)>>>( r, n, Dist_gpu, pitch);
@@ -123,16 +122,19 @@ void block_FW() {
 // phase 1
 __global__ void cal_kernel_phase1(int Round,  int n, int* Dist_gpu, int pitch) {
 
+        
         extern __shared__ int Shared_Dist[];
-        int si = threadIdx.y;
-        int sj = threadIdx.x;
-        // Get the internal position
-        int i = Round * B + threadIdx.y;
-        int j = Round * B + threadIdx.x;
-       
+        int si = threadIdx.y*2;
+        int sj = threadIdx.x*2;
+        // Get the internal position (the left corner)
+        int i = Round * B + threadIdx.y*2;
+        int j = Round * B + threadIdx.x*2;
      
         //move local memory to shared memory
         Shared_Dist[(si*B+sj)] = Dist_gpu[i*pitch+j];
+        Shared_Dist[(si+1)*B+sj] = Dist_gpu[(i+1)*pitch+j];
+        Shared_Dist[(si*B+sj+1)] = Dist_gpu[i*pitch+j+1];
+        Shared_Dist[(si+1)*B+sj+1] = Dist_gpu[(i+1)*pitch+j+1];
         __syncthreads();
         
         if (i>=n || j>=n) {
@@ -140,7 +142,7 @@ __global__ void cal_kernel_phase1(int Round,  int n, int* Dist_gpu, int pitch) {
         }
 
         int temp;
-        // printf("%d", Shared_Dist[i*B+j]);
+        #pragma unroll 64
         for (int k = 0; k < B ; ++k) {
         
             //if ((i>=n) | (j>=n)) continue ;
@@ -148,11 +150,26 @@ __global__ void cal_kernel_phase1(int Round,  int n, int* Dist_gpu, int pitch) {
             if (temp < Shared_Dist[(si*B+sj)]) {
                     Shared_Dist[si*B+sj] = temp;
             }
+            temp = Shared_Dist[(si+1)*B+k] + Shared_Dist[(k*B+sj)];
+            if (temp < Shared_Dist[(si+1)*B+sj]) {
+                    Shared_Dist[(si+1)*B+sj] = temp;
+            }
+            temp = Shared_Dist[(si*B+k)] + Shared_Dist[(k*B+sj+1)];
+            if (temp < Shared_Dist[(si*B+sj+1)]) {
+                    Shared_Dist[(si*B+sj+1)] = temp;
+            }
+            temp = Shared_Dist[(si+1)*B+k] + Shared_Dist[(k*B+sj+1)];
+            if (temp < Shared_Dist[(si+1)*B+sj+1]) {
+                    Shared_Dist[(si+1)*B+sj+1] = temp;
+            }
             
             __syncthreads();
         }
         Dist_gpu[i*pitch+j] =  Shared_Dist[si*B+sj];
-
+        Dist_gpu[i*pitch+j] = Shared_Dist[(si*B+sj)] ;
+        Dist_gpu[(i+1)*pitch+j] = Shared_Dist[(si+1)*B+sj];
+        Dist_gpu[i*pitch+j+1] = Shared_Dist[(si*B+sj+1)];
+        Dist_gpu[(i+1)*pitch+j+1] = Shared_Dist[(si+1)*B+sj+1];
 }
 
 // phase 2
@@ -180,8 +197,8 @@ __global__ void cal_kernel_phase2(int Round,  int n, int* Dist_gpu, int pitch) {
         }
 
         // the position in block
-        int x = threadIdx.y;
-        int y = threadIdx.x;
+        int x = threadIdx.y*2;
+        int y = threadIdx.x*2;
 
         //the position in Dist
         int i = block_start_x * B + x;
@@ -194,10 +211,16 @@ __global__ void cal_kernel_phase2(int Round,  int n, int* Dist_gpu, int pitch) {
         // local to shared memory 
         // itself
         Shared_Dist[x*B+y] = Dist_gpu[i*pitch+j];
+        Shared_Dist[(x+1)*B+y] = Dist_gpu[(i+1)*pitch+j];
+        Shared_Dist[x*B+y+1] = Dist_gpu[i*pitch+j+1];
+        Shared_Dist[(x+1)*B+y+1] = Dist_gpu[(i+1)*pitch+j+1];
         // pivot
         int px = Round*B + x;
         int py = Round*B + y;
         Shared_Pivot[x*B+y] = Dist_gpu[px*pitch + py];
+        Shared_Pivot[(x+1)*B+y] = Dist_gpu[(px+1)*pitch + py];
+        Shared_Pivot[x*B+y+1] = Dist_gpu[px*pitch + py+1];
+        Shared_Pivot[(x+1)*B+y+1] = Dist_gpu[(px+1)*pitch + py+1];
         __syncthreads();
         
         
@@ -205,16 +228,36 @@ __global__ void cal_kernel_phase2(int Round,  int n, int* Dist_gpu, int pitch) {
         int* b =(blockIdx.y == 1)?&Shared_Dist[0]:Shared_Pivot;
 
         int temp;
+        #pragma unroll 64
         for (int k = 0; k < B ; ++k) 
         {
+            
             temp =a[x*B+k] + b[k*B+y];
             if ( temp < Shared_Dist[x*B+y])
             {
                 Shared_Dist[x*B+y] = temp;
             }
+            temp =a[(x+1)*B+k] + b[k*B+y];
+            if ( temp < Shared_Dist[(x+1)*B+y])
+            {
+                Shared_Dist[(x+1)*B+y] = temp;
+            }
+            temp =a[x*B+k] + b[k*B+y+1];
+            if ( temp < Shared_Dist[x*B+y+1])
+            {
+                Shared_Dist[x*B+y+1] = temp;
+            }
+            temp =a[(x+1)*B+k] + b[k*B+y+1];
+            if ( temp < Shared_Dist[(x+1)*B+y+1])
+            {
+                Shared_Dist[(x+1)*B+y+1] = temp;
+            }
             __syncthreads();
         }
         Dist_gpu[i*pitch + j]=Shared_Dist[x*B+y];
+        Dist_gpu[(i+1)*pitch + j]=Shared_Dist[(x+1)*B+y];
+        Dist_gpu[i*pitch + j+1]=Shared_Dist[x*B+y+1];
+        Dist_gpu[(i+1)*pitch + j+1]=Shared_Dist[(x+1)*B+y+1];
 
 
         
@@ -232,8 +275,8 @@ __global__ void cal_kernel_phase3(int Round,  int n, int* Dist_gpu, int pitch) {
         int gy = blockIdx.x;
         
         // sx, sy position in block
-        int sx = threadIdx.y;
-        int sy = threadIdx.x;
+        int sx = threadIdx.y*2;
+        int sy = threadIdx.x*2;
 
         // i, j position in Dist_gpu
         int i = gx*B + sx;
@@ -244,19 +287,46 @@ __global__ void cal_kernel_phase3(int Round,  int n, int* Dist_gpu, int pitch) {
         int * b = &Shared_Dist[B*B];// for column related block
 
         a[sx*B+sy] = Dist_gpu[i*pitch+(Round*B+sy)];
+        a[(sx+1)*B+sy] = Dist_gpu[(i+1)*pitch+(Round*B+sy)];
+        a[sx*B+sy+1] = Dist_gpu[i*pitch+(Round*B+sy+1)];
+        a[(sx+1)*B+sy+1] = Dist_gpu[(i+1)*pitch+(Round*B+sy+1)];
+
         b[sx*B+sy] = Dist_gpu[(Round*B+sx)*pitch+j];
+        b[(sx+1)*B+sy] = Dist_gpu[(Round*B+sx+1)*pitch+j];
+        b[sx*B+sy+1] = Dist_gpu[(Round*B+sx)*pitch+j+1];
+        b[(sx+1)*B+sy+1] = Dist_gpu[(Round*B+sx+1)*pitch+j+1];
+        
         __syncthreads();
         if (i>=n || j>=n) return;
 
         int temp;
-        int self_dist = Dist_gpu[i*pitch+j];
+        int self_dist1 = Dist_gpu[i*pitch+j];
+        int self_dist2 = Dist_gpu[(i+1)*pitch+j];
+        int self_dist3 = Dist_gpu[i*pitch+j+1];
+        int self_dist4 = Dist_gpu[(i+1)*pitch+j+1];
+        #pragma unroll 64
         for (int k = 0; k < B ; ++k) {		
             temp=a[sx*B+k] + b[k*B+sy];
-            if ( temp<self_dist){
-                self_dist=temp;
+            if ( temp<self_dist1){
+                self_dist1=temp;
+            }
+            temp=a[(sx+1)*B+k] + b[k*B+sy];
+            if ( temp<self_dist2){
+                self_dist2=temp;
+            }
+            temp=a[sx*B+k] + b[k*B+sy+1];
+            if ( temp<self_dist3){
+                self_dist3=temp;
+            }
+            temp=a[(sx+1)*B+k] + b[k*B+sy+1];
+            if ( temp<self_dist4){
+                self_dist4=temp;
             }
         }
-        Dist_gpu[i*pitch+j] = self_dist;
+        Dist_gpu[i*pitch+j] = self_dist1;
+        Dist_gpu[(i+1)*pitch+j] = self_dist2;
+        Dist_gpu[i*pitch+j+1] = self_dist3;
+        Dist_gpu[(i+1)*pitch+j+1] = self_dist4;
             
 }
 
@@ -290,4 +360,3 @@ __global__ void cal_kernel(int Round, int block_start_x, int block_start_y, int 
         }
 
 }
-
