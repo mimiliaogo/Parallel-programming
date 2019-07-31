@@ -17,16 +17,18 @@ int n, m;
 static int Dist[V][V];
 
 int NUM_THREAD;
-
-void Shortest_Path(int id, int k)
+pthread_barrier_t our_barrier;
+void Shortest_Path(int id)
 {
-   
-    for (int t = id; t < n; t += NUM_THREAD) {
-        for (int j = 0; j < n; ++j) {
-            if (Dist[t][k] + Dist[k][j] < Dist[t][j])  
-            Dist[t][j] = Dist[t][k] + Dist[k][j]; 
+   for (int k=0; k<n; k++) {
+        for (int t = id; t < n; t += NUM_THREAD) {
+            for (int j = 0; j < n; ++j) {
+                if (Dist[t][k] + Dist[k][j] < Dist[t][j])  
+                Dist[t][j] = Dist[t][k] + Dist[k][j]; 
+            }
         }
-    }
+        pthread_barrier_wait(&our_barrier);
+   }
 
 }
 
@@ -40,16 +42,15 @@ int main(int argc, char* argv[]) {
     //int id[NUM_THREAD];
 
     input(argv[1]);
-    for (int k = 0; k < n; k++)  
-    {  
-        for (int d = 0; d < NUM_THREAD; d++) {
-            thread_arr[d] =  thread(Shortest_Path, d, k);
-        }
-        for (int d=0; d < NUM_THREAD; d++) {
-            thread_arr[d].join();
-        }
-
-    }  
+    pthread_barrier_init(&our_barrier,NULL,NUM_THREAD);
+    for (int d = 0; d < NUM_THREAD; d++) {
+        thread_arr[d] =  thread(Shortest_Path, d);
+    }
+    for (int d=0; d < NUM_THREAD; d++) {
+        thread_arr[d].join();
+    }
+    pthread_barrier_destroy(&our_barrier);
+    
     output(argv[2]);
     return 0;
 }
