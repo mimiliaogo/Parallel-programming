@@ -57,21 +57,21 @@ void input(char* infile) {
 
 void output(char* outFileName) {
     FILE* outfile = fopen(outFileName, "w");
-    for (int i = 0; i < n; ++i) {
-        for (int j = 0; j < n; ++j) {
-            if (Dist[i*n + j] >= INF) Dist[i*n + j] = INF;
-        }
-    }
+    // for (int i = 0; i < n; ++i) {
+    //     for (int j = 0; j < n; ++j) {
+    //         if (Dist[i*n + j] >= INF) Dist[i*n + j] = INF;
+    //     }
+    // }
     fwrite(Dist, sizeof(int), n*n, outfile);
     fclose(outfile);
 
 }
 
-int ceil(int a, int b) { return (a + b - 1) / b; }
+//int ceil(int a, int b) { return (a + b - 1) / b; }
 
 void block_FW() {
-    int round = ceil(n, B);
-    int num_thread = B * B;
+    int round = (n+B -1)/B;
+    //int num_thread = B * B;
     // cudaMalloc((void**)&Dist_gpu, sizeof(int)*n*n);
     // cudaMemcpy(Dist_gpu, Dist, sizeof(int)*n*n, cudaMemcpyHostToDevice);
 
@@ -84,15 +84,17 @@ void block_FW() {
     dim3 block(32, 32);
     dim3 grid2(round-1, 2);
     dim3 grid3(round, round); //to avoid border problem
+    size_t sm_size = B*B*sizeof(int);
+
     for (int r = 0; r < round; ++r) {
         //printf("%d %d\n", r, round);
         //fflush(stdout);
         /* Phase 1*/
         
-        cal_kernel_phase1<<<1, block, B*B*sizeof(int)>>>( r, n, Dist_gpu, pitch);
+        cal_kernel_phase1<<<1, block, sm_size>>>( r, n, Dist_gpu, pitch);
         //cal_kernel<<<1, num_thread>>>(B, r, r, r, 1, 1, n, Dist_gpu, pitch);
         /* Phase 2*/
-        cal_kernel_phase2<<<grid2, block, B*B*2*sizeof(int)>>>(r, n, Dist_gpu, pitch);
+        cal_kernel_phase2<<<grid2, block, 2*sm_size>>>(r, n, Dist_gpu, pitch);
         // if (r > 0)
         //     cal_kernel<<<           r*1, num_thread>>>(B, r,      r,     0,             r,              1, n, Dist_gpu,pitch);
         // cal_kernel<<< (round-r-1)*1, num_thread >>>(B, r,     r,  r +1,  round - r -1,             1, n, Dist_gpu,pitch);
@@ -101,7 +103,7 @@ void block_FW() {
         // cal_kernel<<< 1*(round-r-1), num_thread >>>(B, r,  r +1,     r,             1,  round - r -1, n, Dist_gpu, pitch);
 
         /* Phase 3*/
-        cal_kernel_phase3<<<grid3, block, B*B*2*sizeof(int)>>>(r, n, Dist_gpu, pitch);
+        cal_kernel_phase3<<<grid3, block, 2*sm_size>>>(r, n, Dist_gpu, pitch);
         //calPhase3<<<grid3, block, B*B*2*sizeof(int)>>>(r, Dist_gpu, n, pitch);
        
         // if (r > 0) {
